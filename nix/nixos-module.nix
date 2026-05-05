@@ -74,10 +74,10 @@ in
       };
 
       configureSubstituter = lib.mkOption {
-        type = lib.types.bool;
-        description = "Whether to prepend the address of selector4nix to the substituter list";
-        default = false;
-        example = true;
+        type = lib.types.enum [ "keep" "prepend" "overwrite" ];
+        description = "Whether to configure the substituter list. by either prepending or rewriting";
+        default = "keep";
+        example = "overwrite";
       };
     };
   };
@@ -131,8 +131,14 @@ in
       };
     })
 
-    (lib.mkIf (cfg.enable && cfg.configureSubstituter) {
+    (lib.mkIf (cfg.enable && cfg.configureSubstituter == "prepend") {
       nix.settings.substituters = lib.mkBefore [
+        "http://${cfg.settings.server.ip}:${builtins.toString cfg.settings.server.port}/"
+      ];
+    })
+
+    (lib.mkIf (cfg.enable && cfg.configureSubstituter == "overwrite") {
+      nix.settings.substituters = lib.mkForce [
         "http://${cfg.settings.server.ip}:${builtins.toString cfg.settings.server.port}/"
       ];
     })
