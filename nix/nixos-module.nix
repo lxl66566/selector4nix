@@ -32,6 +32,13 @@ in
             or (withSystem pkgs.stdenv.hostPlatform.system ({ config, ... }: config.packages.selector4nix));
       };
 
+      logLevel = lib.mkOption {
+        type = lib.types.enum ["error" "warn" "info" "debug" "trace"];
+        description = "The verbosity of the logging output";
+        default = "info";
+        example = "debug";
+      };
+
       settings = lib.mkOption {
         type = lib.types.submodule {
           freeformType = settingsFormat.type;
@@ -93,7 +100,10 @@ in
         serviceConfig = {
           Type = "simple";
           ExecStart = "${cfg.package}/bin/selector4nix";
-          Environment = [ "SELECTOR4NIX_CONFIG_FILE=${configFile}" ];
+          Environment = [
+            "SELECTOR4NIX_CONFIG_FILE=${configFile}"
+            "RUST_LOG=selector4nix=${cfg.logLevel}"
+          ];
           Restart = "on-failure";
           RestartSec = 5;
 
