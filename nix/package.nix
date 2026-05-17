@@ -12,8 +12,10 @@ rustPlatform.buildRustPackage {
     fileset = lib.fileset.unions [
       ../Cargo.toml
       ../Cargo.lock
+      ../docs/selector4nix.example.toml
       ../components
       ../src
+      ../tests
     ];
   };
 
