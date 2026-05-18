@@ -22,7 +22,7 @@ url = { version = "2.5.8", features = ["serde"] }
 
 [package]
 name = "selector4nix"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 
 [dependencies]
