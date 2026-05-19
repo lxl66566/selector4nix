@@ -39,7 +39,16 @@ impl Substituter {
     }
 
     pub fn is_unavailable(&self) -> bool {
-        matches!(&self.availability, Availability::ServiceError { .. })
+        matches!(
+            &self.availability,
+            Availability::Offline { .. } | Availability::ServiceError { .. },
+        )
+    }
+
+    pub fn on_detected_offline(mut self, now: Instant) -> (Instant, Self) {
+        self.availability = self.availability.change_to_offline(now);
+        let retry_instant = now + self.availability.retry_duration().unwrap();
+        (retry_instant, self)
     }
 
     pub fn on_detected_service_error(mut self, now: Instant) -> (Instant, Self) {

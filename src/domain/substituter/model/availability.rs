@@ -5,6 +5,9 @@ use tokio::time::Instant;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Availability {
     Normal,
+    Offline {
+        detected_at: Instant,
+    },
     ServiceError {
         detected_at: Instant,
         prev_failures: usize,
@@ -15,8 +18,19 @@ pub enum Availability {
 }
 
 impl Availability {
+    pub const OFFLINE_RETRY_PERIOD: Duration = Duration::from_secs(30);
+
     pub fn normal() -> Self {
         Self::Normal
+    }
+
+    pub fn change_to_offline(self, now: Instant) -> Self {
+        match self {
+            Self::Normal => Self::Offline { detected_at: now },
+            s @ Self::Offline { .. } => s,
+            s @ Self::ServiceError { .. } => s,
+            Self::MaybeReady { .. } => Self::Offline { detected_at: now },
+        }
     }
 
     pub fn change_to_service_error(self, now: Instant) -> Self {
@@ -25,6 +39,7 @@ impl Availability {
                 detected_at: now,
                 prev_failures: 0,
             },
+            s @ Self::Offline { .. } => s,
             s @ Self::ServiceError { .. } => s,
             Self::MaybeReady { prev_failures } => Self::ServiceError {
                 detected_at: now,
@@ -35,6 +50,7 @@ impl Availability {
 
     pub fn change_to_maybe_ready(self) -> Self {
         match self {
+            Self::Offline { .. } => Self::MaybeReady { prev_failures: 0 },
             Self::ServiceError { prev_failures, .. } => Self::MaybeReady { prev_failures },
             otherwise => otherwise,
         }
@@ -42,7 +58,14 @@ impl Availability {
 
     pub fn update_and_check_availability(self, now: Instant) -> (bool, Self) {
         match &self {
-            Availability::ServiceError {
+            Self::Offline { detected_at } => {
+                if *detected_at + Self::OFFLINE_RETRY_PERIOD <= now {
+                    (true, self.change_to_maybe_ready())
+                } else {
+                    (false, self)
+                }
+            }
+            Self::ServiceError {
                 detected_at,
                 prev_failures,
             } => {
@@ -58,6 +81,7 @@ impl Availability {
 
     pub fn retry_duration(&self) -> Option<Duration> {
         match self {
+            Self::Offline { .. } => Some(Self::OFFLINE_RETRY_PERIOD),
             Self::ServiceError { prev_failures, .. } => {
                 Some(Self::calc_retry_duration(*prev_failures))
             }
@@ -74,9 +98,10 @@ impl Availability {
 
     pub fn prev_failures(&self) -> usize {
         match self {
-            Availability::Normal => 0,
-            Availability::ServiceError { prev_failures, .. } => *prev_failures,
-            Availability::MaybeReady { prev_failures } => *prev_failures,
+            Self::Normal => 0,
+            Self::Offline { .. } => 0,
+            Self::ServiceError { prev_failures, .. } => *prev_failures,
+            Self::MaybeReady { prev_failures } => *prev_failures,
         }
     }
 }
@@ -142,6 +167,25 @@ mod tests {
             prev_failures: 0,
         };
         let retry_at = now + Duration::from_millis(500);
+        let (available, new_state) = state.update_and_check_availability(retry_at);
+        assert!(available);
+        assert_eq!(new_state, Availability::MaybeReady { prev_failures: 0 });
+    }
+
+    #[test]
+    fn update_and_check_availability_returns_true_when_offline_before_timeout() {
+        let now = Instant::now();
+        let state = Availability::Offline { detected_at: now };
+        let retry_at = now + Availability::OFFLINE_RETRY_PERIOD - Duration::from_millis(1);
+        let (available, _) = state.update_and_check_availability(retry_at);
+        assert!(!available);
+    }
+
+    #[test]
+    fn update_and_check_availability_returns_true_when_offline_after_timeout() {
+        let now = Instant::now();
+        let state = Availability::Offline { detected_at: now };
+        let retry_at = now + Availability::OFFLINE_RETRY_PERIOD + Duration::from_millis(1);
         let (available, new_state) = state.update_and_check_availability(retry_at);
         assert!(available);
         assert_eq!(new_state, Availability::MaybeReady { prev_failures: 0 });

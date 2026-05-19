@@ -23,6 +23,23 @@ impl SubstituterLifecycleService {
         (substituter.on_detected_normal(), Vec::new())
     }
 
+    pub fn update_on_service_offline(
+        &self,
+        substituter: Substituter,
+        now: Instant,
+    ) -> (Substituter, Vec<SubstituterLifecycleEvent>) {
+        if substituter.is_unavailable() {
+            (substituter, Vec::new())
+        } else {
+            let (retry_instant, substituter) = substituter.on_detected_offline(now);
+            let events = vec![
+                SubstituterLifecycleEvent::NotifyUnavailable,
+                SubstituterLifecycleEvent::ScheduleRetryReady(retry_instant),
+            ];
+            (substituter, events)
+        }
+    }
+
     pub fn update_on_service_error(
         &self,
         substituter: Substituter,
