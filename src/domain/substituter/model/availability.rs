@@ -5,7 +5,10 @@ use tokio::time::Instant;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Availability {
     Normal,
-    Unavailable {
+    Offline {
+        detected_at: Instant,
+    },
+    ServiceError {
         detected_at: Instant,
         prev_failures: usize,
     },
@@ -15,18 +18,30 @@ pub enum Availability {
 }
 
 impl Availability {
+    pub const OFFLINE_RETRY_PERIOD: Duration = Duration::from_secs(30);
+
     pub fn normal() -> Self {
         Self::Normal
     }
 
-    pub fn change_to_unavailable(self, now: Instant) -> Self {
+    pub fn change_to_offline(self, now: Instant) -> Self {
         match self {
-            Self::Normal => Self::Unavailable {
+            Self::Normal => Self::Offline { detected_at: now },
+            s @ Self::Offline { .. } => s,
+            s @ Self::ServiceError { .. } => s,
+            Self::MaybeReady { .. } => Self::Offline { detected_at: now },
+        }
+    }
+
+    pub fn change_to_service_error(self, now: Instant) -> Self {
+        match self {
+            Self::Normal => Self::ServiceError {
                 detected_at: now,
                 prev_failures: 0,
             },
-            s @ Self::Unavailable { .. } => s,
-            Self::MaybeReady { prev_failures } => Self::Unavailable {
+            s @ Self::Offline { .. } => s,
+            s @ Self::ServiceError { .. } => s,
+            Self::MaybeReady { prev_failures } => Self::ServiceError {
                 detected_at: now,
                 prev_failures: prev_failures + 1,
             },
@@ -35,14 +50,22 @@ impl Availability {
 
     pub fn change_to_maybe_ready(self) -> Self {
         match self {
-            Self::Unavailable { prev_failures, .. } => Self::MaybeReady { prev_failures },
+            Self::Offline { .. } => Self::MaybeReady { prev_failures: 0 },
+            Self::ServiceError { prev_failures, .. } => Self::MaybeReady { prev_failures },
             otherwise => otherwise,
         }
     }
 
     pub fn update_and_check_availability(self, now: Instant) -> (bool, Self) {
         match &self {
-            Availability::Unavailable {
+            Self::Offline { detected_at } => {
+                if *detected_at + Self::OFFLINE_RETRY_PERIOD <= now {
+                    (true, self.change_to_maybe_ready())
+                } else {
+                    (false, self)
+                }
+            }
+            Self::ServiceError {
                 detected_at,
                 prev_failures,
             } => {
@@ -58,7 +81,8 @@ impl Availability {
 
     pub fn retry_duration(&self) -> Option<Duration> {
         match self {
-            Self::Unavailable { prev_failures, .. } => {
+            Self::Offline { .. } => Some(Self::OFFLINE_RETRY_PERIOD),
+            Self::ServiceError { prev_failures, .. } => {
                 Some(Self::calc_retry_duration(*prev_failures))
             }
             _ => None,
@@ -74,9 +98,10 @@ impl Availability {
 
     pub fn prev_failures(&self) -> usize {
         match self {
-            Availability::Normal => 0,
-            Availability::Unavailable { prev_failures, .. } => *prev_failures,
-            Availability::MaybeReady { prev_failures } => *prev_failures,
+            Self::Normal => 0,
+            Self::Offline { .. } => 0,
+            Self::ServiceError { prev_failures, .. } => *prev_failures,
+            Self::MaybeReady { prev_failures } => *prev_failures,
         }
     }
 }
@@ -86,12 +111,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn change_to_unavailable_succeeds_from_normal() {
+    fn change_to_service_error_succeeds_from_normal() {
         let now = Instant::now();
-        let result = Availability::Normal.change_to_unavailable(now);
+        let result = Availability::Normal.change_to_service_error(now);
         assert_eq!(
             result,
-            Availability::Unavailable {
+            Availability::ServiceError {
                 detected_at: now,
                 prev_failures: 0,
             }
@@ -99,16 +124,16 @@ mod tests {
     }
 
     #[test]
-    fn change_to_unavailable_doesnt_change_prev_failures() {
+    fn change_to_service_error_doesnt_change_prev_failures() {
         let now = Instant::now();
-        let state = Availability::Unavailable {
+        let state = Availability::ServiceError {
             detected_at: now,
             prev_failures: 1,
         };
-        let result = state.change_to_unavailable(now);
+        let result = state.change_to_service_error(now);
         assert_eq!(
             result,
-            Availability::Unavailable {
+            Availability::ServiceError {
                 detected_at: now,
                 prev_failures: 1,
             }
@@ -124,9 +149,9 @@ mod tests {
     }
 
     #[test]
-    fn update_and_check_availability_returns_false_when_unavailable_before_timeout() {
+    fn update_and_check_availability_returns_false_when_service_error_before_timeout() {
         let now = Instant::now();
-        let state = Availability::Unavailable {
+        let state = Availability::ServiceError {
             detected_at: now,
             prev_failures: 0,
         };
@@ -135,13 +160,32 @@ mod tests {
     }
 
     #[test]
-    fn update_and_check_availability_returns_true_when_unavailable_after_timeout() {
+    fn update_and_check_availability_returns_true_when_service_error_after_timeout() {
         let now = Instant::now();
-        let state = Availability::Unavailable {
+        let state = Availability::ServiceError {
             detected_at: now,
             prev_failures: 0,
         };
         let retry_at = now + Duration::from_millis(500);
+        let (available, new_state) = state.update_and_check_availability(retry_at);
+        assert!(available);
+        assert_eq!(new_state, Availability::MaybeReady { prev_failures: 0 });
+    }
+
+    #[test]
+    fn update_and_check_availability_returns_true_when_offline_before_timeout() {
+        let now = Instant::now();
+        let state = Availability::Offline { detected_at: now };
+        let retry_at = now + Availability::OFFLINE_RETRY_PERIOD - Duration::from_millis(1);
+        let (available, _) = state.update_and_check_availability(retry_at);
+        assert!(!available);
+    }
+
+    #[test]
+    fn update_and_check_availability_returns_true_when_offline_after_timeout() {
+        let now = Instant::now();
+        let state = Availability::Offline { detected_at: now };
+        let retry_at = now + Availability::OFFLINE_RETRY_PERIOD + Duration::from_millis(1);
         let (available, new_state) = state.update_and_check_availability(retry_at);
         assert!(available);
         assert_eq!(new_state, Availability::MaybeReady { prev_failures: 0 });

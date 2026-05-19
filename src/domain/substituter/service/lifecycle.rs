@@ -23,7 +23,7 @@ impl SubstituterLifecycleService {
         (substituter.on_detected_normal(), Vec::new())
     }
 
-    pub fn update_on_service_failed(
+    pub fn update_on_service_offline(
         &self,
         substituter: Substituter,
         now: Instant,
@@ -31,7 +31,24 @@ impl SubstituterLifecycleService {
         if substituter.is_unavailable() {
             (substituter, Vec::new())
         } else {
-            let (retry_instant, substituter) = substituter.on_detected_unavailable(now);
+            let (retry_instant, substituter) = substituter.on_detected_offline(now);
+            let events = vec![
+                SubstituterLifecycleEvent::NotifyUnavailable,
+                SubstituterLifecycleEvent::ScheduleRetryReady(retry_instant),
+            ];
+            (substituter, events)
+        }
+    }
+
+    pub fn update_on_service_error(
+        &self,
+        substituter: Substituter,
+        now: Instant,
+    ) -> (Substituter, Vec<SubstituterLifecycleEvent>) {
+        if substituter.is_unavailable() {
+            (substituter, Vec::new())
+        } else {
+            let (retry_instant, substituter) = substituter.on_detected_service_error(now);
             let events = vec![
                 SubstituterLifecycleEvent::NotifyUnavailable,
                 SubstituterLifecycleEvent::ScheduleRetryReady(retry_instant),
@@ -79,7 +96,7 @@ mod tests {
         let sub = make_substituter(Availability::Normal);
         let now = Instant::now();
 
-        let (result, events) = service.update_on_service_failed(sub, now);
+        let (result, events) = service.update_on_service_error(sub, now);
 
         assert!(result.is_unavailable());
         assert_eq!(events.len(), 2);
@@ -99,13 +116,13 @@ mod tests {
         let sub = make_substituter(Availability::MaybeReady { prev_failures: 2 });
         let now = Instant::now();
 
-        let (result, events) = service.update_on_service_failed(sub, now);
+        let (result, events) = service.update_on_service_error(sub, now);
 
         assert!(result.is_unavailable());
         assert_eq!(events.len(), 2);
         assert!(matches!(
             result.availability(),
-            Availability::Unavailable {
+            Availability::ServiceError {
                 prev_failures: 3,
                 ..
             }
@@ -115,7 +132,7 @@ mod tests {
     #[test]
     fn update_on_next_retry_ready_succeeds() {
         let service = SubstituterLifecycleService::new();
-        let sub = make_substituter(Availability::Unavailable {
+        let sub = make_substituter(Availability::ServiceError {
             detected_at: Instant::now(),
             prev_failures: 0,
         });
