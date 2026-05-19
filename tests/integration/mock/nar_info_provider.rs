@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use anyhow::Result as AnyhowResult;
 use async_trait::async_trait;
-use selector4nix::domain::nar::port::{NarInfoProvider, NarInfoQueryData};
+use selector4nix::domain::nar::port::error_ctx::{OfflineSnafu, ServiceSnafu};
+use selector4nix::domain::nar::port::{NarInfoProvider, NarInfoQueryData, QueryNarInfoError};
 use selector4nix::domain::substituter::model::Url;
+use snafu::ResultExt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MockNarInfoProvider {
@@ -24,11 +25,11 @@ impl MockNarInfoProvider {
 
 #[async_trait]
 impl NarInfoProvider for MockNarInfoProvider {
-    async fn provide_nar_info(
+    async fn query_nar_info(
         &self,
         url: &Url,
         timeout: Option<Duration>,
-    ) -> AnyhowResult<Option<NarInfoQueryData>> {
+    ) -> Result<Option<NarInfoQueryData>, QueryNarInfoError> {
         let Some(data) = self.queries.get(url) else {
             return Ok(None);
         };
@@ -36,13 +37,13 @@ impl NarInfoProvider for MockNarInfoProvider {
         match (data, timeout) {
             (Ok(data), Some(timeout)) if data.latency > timeout => {
                 tokio::time::sleep(timeout).await;
-                Err(anyhow::anyhow!("timeout"))
+                Err(anyhow::anyhow!("timeout")).context(OfflineSnafu)
             }
             (Ok(data), _) => {
                 tokio::time::sleep(data.latency).await;
                 Ok(Some(data.clone()))
             }
-            (Err(err), _) => Err(anyhow::anyhow!("{err}")),
+            (Err(err), _) => Err(anyhow::anyhow!("{err}")).context(ServiceSnafu),
         }
     }
 }
