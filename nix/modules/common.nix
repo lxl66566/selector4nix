@@ -9,6 +9,8 @@
 
 let
   settingsFormat = pkgs.formats.toml { };
+in
+{
   serviceOptions = {
     enable = lib.mkOption {
       type = lib.types.bool;
@@ -90,8 +92,7 @@ let
       example = "overwrite";
     };
   };
-in
-{
+
   mkConfigFile =
     cfg:
     let
@@ -101,8 +102,6 @@ in
       echo 'Checking the configuration file `selector4nix.toml` via `selector4nix check`'
       ${cfg.package}/bin/selector4nix --config-file "${rawConfigFile}" check && cp ${rawConfigFile} $out
     '';
-
-  inherit serviceOptions;
 
   mkSubstituterConfig =
     cfg:
