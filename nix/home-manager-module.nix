@@ -20,6 +20,20 @@ in
   };
 
   config = lib.mkMerge [
+    {
+      assertions = [
+        {
+          assertion = (cfg.enable && cfg.configureSubstituter != "keep") -> config.nix.package != null;
+          message = ''
+            `services.selector4nix.configureSubstituter = "${cfg.configureSubstituter}"` sets `nix.settings.substituters`,
+            but Home Manager requires `nix.package` to be set when generating `nix.conf` from `nix.settings`.
+
+            Set `nix.package` (for example, `nix.package = pkgs.nix;`) or set `services.selector4nix.configureSubstituter = "keep"`.
+          '';
+        }
+      ];
+    }
+
     (lib.mkIf cfg.enable (
       lib.mkMerge [
         (lib.mkIf pkgs.stdenv.isLinux {
