@@ -142,7 +142,9 @@ pub async fn init_context(config: &AppConfiguration) -> AnyhowResult<Arc<AppCont
     nar_file_index_pre.run();
     let nar_file_index = Arc::new(nar_file_index_view);
 
-    let substituter_lifecycle_service = Arc::new(SubstituterLifecycleService::new());
+    let substituter_lifecycle_service = Arc::new(SubstituterLifecycleService::new(
+        config.network.periodic_probing,
+    ));
 
     let nar_info_query_service = Arc::new(NarResolutionService::new(
         nar_info_provider,
