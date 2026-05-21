@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use selector4nix::domain::nar::model::{NarFileName, NarInfoData, StorePathHash};
-use selector4nix::domain::nar::port::NarInfoQueryData;
+use selector4nix::domain::nar_info::model::{NarFileName, NarInfoData, StorePathHash};
+use selector4nix::domain::nar_info::port::NarInfoQueryData;
 use selector4nix::domain::substituter::model::Url;
 
 use super::substituter;

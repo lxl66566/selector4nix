@@ -1,8 +1,8 @@
 use crate::application::{AppError, AppErrorKind};
-use crate::domain::nar::model::{
+use crate::domain::nar_info::model::{
     TryNewNarFileNameError, TryNewNarInfoData, TryNewStorePathHashError,
 };
-use crate::domain::nar::service::ResolveNarInfoError;
+use crate::domain::nar_info::service::ResolveNarInfoError;
 
 impl From<TryNewStorePathHashError> for AppError {
     fn from(error: TryNewStorePathHashError) -> Self {

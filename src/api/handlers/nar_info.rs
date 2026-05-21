@@ -6,7 +6,7 @@ use axum::http::{Response, header};
 
 use crate::api::state::AppContext;
 use crate::application::{AppError, AppErrorKind};
-use crate::domain::nar::model::StorePathHash;
+use crate::domain::nar_info::model::StorePathHash;
 
 pub async fn get_nar_info(
     State(ctx): State<Arc<AppContext>>,

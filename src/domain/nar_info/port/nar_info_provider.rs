@@ -4,7 +4,7 @@ use anyhow::Error as AnyhowError;
 use async_trait::async_trait;
 use snafu::Snafu;
 
-use crate::domain::nar::model::NarInfoData;
+use crate::domain::nar_info::model::NarInfoData;
 use crate::domain::substituter::model::Url;
 
 #[async_trait]

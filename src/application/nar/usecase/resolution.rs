@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::application::nar::actor::{NarActorRegistry, NarRequest};
 use crate::application::substituter::actor::{SubstituterActorRegistry, SubstituterRequest};
 use crate::application::{AppErrorKind, AppOptionExt, AppResult, AppResultExt};
-use crate::domain::nar::model::{NarInfoData, StorePathHash};
-use crate::domain::nar::service::{NarResolutionEvent, ResolveNarInfoError};
+use crate::domain::nar_info::model::{NarInfoData, StorePathHash};
+use crate::domain::nar_info::service::{NarResolutionEvent, ResolveNarInfoError};
 
 pub struct NarResolutionUseCase {
     nar_registry: Arc<NarActorRegistry>,

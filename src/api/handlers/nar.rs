@@ -7,8 +7,8 @@ use futures::StreamExt;
 
 use crate::api::state::AppContext;
 use crate::application::AppError;
-use crate::domain::nar::model::NarFileName;
-use crate::domain::nar::port::NarStreamData;
+use crate::domain::nar_info::model::NarFileName;
+use crate::domain::nar_info::port::NarStreamData;
 
 pub async fn get_nar(
     State(ctx): State<Arc<AppContext>>,

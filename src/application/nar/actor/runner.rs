@@ -5,9 +5,11 @@ use selector4nix_actor::actor::{
 };
 use tokio::sync::oneshot::Sender as OneshotSender;
 
-use crate::domain::nar::index::NarFileEvent;
-use crate::domain::nar::model::{Nar, NarInfoData, NarInfoResolution};
-use crate::domain::nar::service::{NarResolutionEvent, NarResolutionService, ResolveNarInfoError};
+use crate::domain::nar_info::index::NarFileEvent;
+use crate::domain::nar_info::model::{NarInfo, NarInfoData, NarInfoResolution};
+use crate::domain::nar_info::service::{
+    NarResolutionEvent, NarResolutionService, ResolveNarInfoError,
+};
 
 #[derive(Debug)]
 pub enum NarRequest {
@@ -30,7 +32,7 @@ impl ResolveNarInfoResponse {
 }
 
 pub struct NarActor {
-    init: Option<Nar>,
+    init: Option<NarInfo>,
     context: Context<NarRequest, EmptyInternal>,
     nar_info_query_service: Arc<NarResolutionService>,
     nar_file_index_pub: AnyAddress<NarFileEvent>,
@@ -38,7 +40,7 @@ pub struct NarActor {
 
 impl NarActor {
     pub fn new(
-        init: Nar,
+        init: NarInfo,
         nar_info_query_service: Arc<NarResolutionService>,
         nar_file_index_pub: AnyAddress<NarFileEvent>,
     ) -> ActorPre<Self> {
@@ -52,9 +54,9 @@ impl NarActor {
 
     async fn handle_request_resolve_nar_info(
         &self,
-        nar: Nar,
+        nar: NarInfo,
         reply_to: OneshotSender<ResolveNarInfoResponse>,
-    ) -> Nar {
+    ) -> NarInfo {
         if let Some(resolution) = nar.resolution() {
             let res = Ok(resolution.nar_info().cloned());
             let _ = reply_to.send(ResolveNarInfoResponse::new(res, Vec::new()));
@@ -94,7 +96,7 @@ impl NarActor {
 impl Actor for NarActor {
     type Request = NarRequest;
     type Internal = EmptyInternal;
-    type State = Nar;
+    type State = NarInfo;
 
     fn context(&mut self) -> &mut Context<Self::Request, Self::Internal> {
         &mut self.context

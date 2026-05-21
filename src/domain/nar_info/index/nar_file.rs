@@ -3,7 +3,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use getset::{CopyGetters, Getters};
 
-use crate::domain::nar::model::NarFileName;
+use crate::domain::nar_info::model::NarFileName;
 use crate::domain::substituter::model::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

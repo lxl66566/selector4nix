@@ -1,7 +1,7 @@
 use getset::Getters;
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use crate::domain::nar::model::{NarFileName, TryNewNarFileNameError};
+use crate::domain::nar_info::model::{NarFileName, TryNewNarFileNameError};
 use crate::domain::substituter::model::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Getters)]

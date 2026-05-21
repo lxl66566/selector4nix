@@ -9,8 +9,8 @@ use selector4nix::application::nar::actor::NarActor;
 use selector4nix::application::nar::usecase::{NarResolutionUseCase, NarStreamingUseCase};
 use selector4nix::application::substituter::actor::SubstituterActor;
 use selector4nix::application::substituter::usecase::SubstituterQueryUseCase;
-use selector4nix::domain::nar::model::{Nar, StorePathHash};
-use selector4nix::domain::nar::service::NarResolutionService;
+use selector4nix::domain::nar_info::model::{NarInfo, StorePathHash};
+use selector4nix::domain::nar_info::service::NarResolutionService;
 use selector4nix::domain::substituter::model::{Availability, Substituter, SubstituterMeta};
 use selector4nix::domain::substituter::service::SubstituterLifecycleService;
 use selector4nix::infrastructure::config::AppConfiguration;
@@ -186,7 +186,7 @@ pub async fn init_context(config: &AppConfiguration) -> AnyhowResult<Arc<AppCont
                 let nar_file_index_pub = nar_file_index_pub.clone();
                 move |hash: &StorePathHash| {
                     let addr = NarActor::new(
-                        Nar::new(hash.clone()),
+                        NarInfo::new(hash.clone()),
                         nar_info_query_service.clone(),
                         nar_file_index_pub.clone(),
                     )

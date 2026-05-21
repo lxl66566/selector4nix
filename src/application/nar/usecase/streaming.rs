@@ -3,9 +3,9 @@ use std::sync::Arc;
 use selector4nix_actor::actor::AnyAddress;
 
 use crate::application::{AppErrorKind, AppOptionExt, AppResult, AppResultExt};
-use crate::domain::nar::index::{NarFileEvent, NarFileIndex, NarFileLocation};
-use crate::domain::nar::model::NarFileName;
-use crate::domain::nar::port::{NarStreamData, NarStreamProvider};
+use crate::domain::nar_info::index::{NarFileEvent, NarFileIndex, NarFileLocation};
+use crate::domain::nar_info::model::NarFileName;
+use crate::domain::nar_info::port::{NarStreamData, NarStreamProvider};
 use crate::domain::substituter::index::SubstituterAvailabilityIndex;
 
 pub struct NarStreamingUseCase {

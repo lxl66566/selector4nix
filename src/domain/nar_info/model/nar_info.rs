@@ -1,7 +1,7 @@
 use getset::Getters;
 
-use crate::domain::nar::index::NarFileLocation;
-use crate::domain::nar::model::{NarInfoData, StorePathHash};
+use crate::domain::nar_info::index::NarFileLocation;
+use crate::domain::nar_info::model::{NarInfoData, StorePathHash};
 use crate::domain::substituter::model::{SubstituterMeta, Url};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,13 +62,13 @@ pub enum NarUrlRewriteOption {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Getters)]
-pub struct Nar {
+pub struct NarInfo {
     #[getset(get = "pub")]
     hash: StorePathHash,
     resolution: Option<NarInfoResolution>,
 }
 
-impl Nar {
+impl NarInfo {
     pub fn new(hash: StorePathHash) -> Self {
         Self {
             hash,
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn new_succeeds() {
         let hash = make_hash();
-        let nar = Nar::new(hash.clone());
+        let nar = NarInfo::new(hash.clone());
         assert_eq!(nar.hash(), &hash);
         assert!(nar.resolution().is_none());
     }

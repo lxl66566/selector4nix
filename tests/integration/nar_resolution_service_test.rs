@@ -2,9 +2,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use selector4nix::domain::nar::model::{NarUrlRewriteOption, StorePathHash};
-use selector4nix::domain::nar::port::NarInfoQueryData;
-use selector4nix::domain::nar::service::{
+use selector4nix::domain::nar_info::model::{NarUrlRewriteOption, StorePathHash};
+use selector4nix::domain::nar_info::port::NarInfoQueryData;
+use selector4nix::domain::nar_info::service::{
     NarResolutionEvent, NarResolutionService, ResolveNarInfoError,
 };
 use selector4nix::domain::substituter::model::{Substituter, Url};

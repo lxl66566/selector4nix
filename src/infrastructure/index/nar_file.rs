@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use moka::future::Cache;
 use selector4nix_actor::actor::{Actor, ActorPre, ActorPreBuilder, Context, EmptyInternal};
 
-use crate::domain::nar::index::{NarFileEvent, NarFileIndex, NarFileLocation};
-use crate::domain::nar::model::NarFileName;
+use crate::domain::nar_info::index::{NarFileEvent, NarFileIndex, NarFileLocation};
+use crate::domain::nar_info::model::NarFileName;
 
 #[derive(Clone)]
 pub struct NarFileIndexView {
