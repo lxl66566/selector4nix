@@ -14,7 +14,7 @@ pub fn make_source_url(substituter_url: &Url, priority: u32) -> Url {
 
 pub fn make_nar_file_key() -> NarFileKey {
     let nar_file = NarFileName::new(NAR_FILE.to_string()).unwrap();
-    NarFileKey::from_file_name(&nar_file).unwrap()
+    NarFileKey::from_file_name(&nar_file)
 }
 
 pub fn make_nar_file_location(substituter_url: &Url, priority: u32) -> NarFileLocation {

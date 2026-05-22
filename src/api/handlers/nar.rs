@@ -6,7 +6,7 @@ use axum::http::{Response, header};
 use futures::StreamExt;
 
 use crate::api::state::AppContext;
-use crate::application::{AppError, AppErrorKind};
+use crate::application::AppError;
 use crate::domain::nar_file::model::NarFileKey;
 use crate::domain::nar_info::model::NarFileName;
 use crate::domain::nar_info::port::NarStreamData;
@@ -16,9 +16,7 @@ pub async fn get_nar(
     Path(path): Path<String>,
 ) -> Result<Response<Body>, AppError> {
     let nar_file = NarFileName::new(path)?;
-    let key = NarFileKey::from_file_name(&nar_file).ok_or_else(|| {
-        AppError::new(AppErrorKind::Rule, anyhow::anyhow!("invalid nar file name"))
-    })?;
+    let key = NarFileKey::from_file_name(&nar_file);
 
     let data = ctx.nar_file_streaming_usecase().stream_nar(key).await?;
     Ok(build_response(data))

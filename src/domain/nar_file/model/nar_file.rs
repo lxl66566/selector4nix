@@ -19,12 +19,15 @@ impl NarFileKey {
         }
     }
 
-    pub fn from_file_name(file: &NarFileName) -> Option<Self> {
-        let (prefix, suffix) = file.value().split_once(".nar.")?;
-        Some(Self {
+    pub fn from_file_name(file: &NarFileName) -> Self {
+        let (prefix, suffix) = file
+            .value()
+            .split_once(".nar.")
+            .expect("NarFileName construction guarantees `.nar.` is present");
+        Self {
             nar_hash: prefix.to_string(),
             compression: suffix.to_string(),
-        })
+        }
     }
 
     pub fn to_file_name(&self) -> NarFileName {

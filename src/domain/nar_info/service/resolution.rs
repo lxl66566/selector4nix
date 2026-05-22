@@ -52,11 +52,9 @@ impl NarInfoResolutionService {
             Ok(outcome) => {
                 let resolution =
                     NarInfoResolution::from_completed_query(outcome, self.rewrite_nar_url);
-                if let NarInfoResolution::Resolved { nar_info, location } = &resolution
-                    && let Some(nar_file_key) = NarFileKey::from_file_name(nar_info.nar_file())
-                {
+                if let NarInfoResolution::Resolved { nar_info, location } = &resolution {
                     events.push(ResolveNarInfoEvent::NarFileLocated {
-                        nar_file_key,
+                        nar_file_key: NarFileKey::from_file_name(nar_info.nar_file()),
                         location: location.clone(),
                     });
                 }
