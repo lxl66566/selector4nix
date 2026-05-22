@@ -73,7 +73,10 @@ impl NarInfoResolutionUseCase {
                 let sender = self.substituter_registry.get(&url).await;
                 let _ = sender.tell(SubstituterRequest::ServiceError).await;
             }
-            ResolveNarInfoEvent::NarFileLocated { nar_file_key, location } => {
+            ResolveNarInfoEvent::NarFileLocated {
+                nar_file_key,
+                location,
+            } => {
                 let sender = self.nar_file_registry.get(&nar_file_key).await;
                 let _ = sender.tell(NarFileRequest::SetLocation(location)).await;
             }
