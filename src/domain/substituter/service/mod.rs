@@ -1,3 +1,3 @@
 mod lifecycle;
 
-pub use lifecycle::{SubstituterLifecycleEvent, SubstituterLifecycleService};
+pub use lifecycle::{UpdateSubstituterEvent, SubstituterService};

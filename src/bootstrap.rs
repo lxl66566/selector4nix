@@ -16,7 +16,7 @@ use selector4nix::domain::nar_file::service::NarFileService;
 use selector4nix::domain::nar_info::model::{NarInfo, StorePathHash};
 use selector4nix::domain::nar_info::service::NarInfoService;
 use selector4nix::domain::substituter::model::{Availability, Substituter, SubstituterMeta};
-use selector4nix::domain::substituter::service::SubstituterLifecycleService;
+use selector4nix::domain::substituter::service::SubstituterService;
 use selector4nix::infrastructure::config::AppConfiguration;
 use selector4nix::infrastructure::index::*;
 use selector4nix::infrastructure::provider::*;
@@ -140,9 +140,7 @@ pub async fn init_context(config: &AppConfiguration) -> AnyhowResult<Arc<AppCont
     substituter_availability_index_pre.run();
     let substituter_availability_index = Arc::new(substituter_availability_index_view);
 
-    let substituter_lifecycle_service = Arc::new(SubstituterLifecycleService::new(
-        config.network.periodic_probing,
-    ));
+    let substituter_service = Arc::new(SubstituterService::new(config.network.periodic_probing));
 
     let nar_file_service = Arc::new(NarFileService::new(
         nar_stream_provider,
@@ -166,11 +164,11 @@ pub async fn init_context(config: &AppConfiguration) -> AnyhowResult<Arc<AppCont
             .build();
         for sub in &substituters {
             let avail_pub = substituter_availability_pub.clone();
-            let lifecycle_service = substituter_lifecycle_service.clone();
+            let substituter_service = substituter_service.clone();
             let sub_probing_provider = substituter_probing_provider.clone();
             let addr = SubstituterActor::new(
                 Some(sub.clone()),
-                lifecycle_service,
+                substituter_service,
                 sub_probing_provider,
                 avail_pub,
             )
