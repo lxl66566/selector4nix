@@ -45,75 +45,266 @@ impl Substituter {
         )
     }
 
-    pub fn on_detected_offline(mut self, now: Instant) -> (Instant, Self) {
-        self.availability = self.availability.change_to_offline(now);
+    pub fn update_on_service_successful(mut self) -> (Self, Vec<UpdateSubstituterEvent>) {
+        self = self.try_change_to_normal();
+        let events = if !self.is_unavailable() {
+            vec![UpdateSubstituterEvent::NotifyAvailable]
+        } else {
+            Vec::new()
+        };
+        (self, events)
+    }
+
+    pub fn update_on_service_offline(
+        self,
+        now: Instant,
+    ) -> (Substituter, Vec<UpdateSubstituterEvent>) {
+        if self.is_unavailable() {
+            (self, Vec::new())
+        } else {
+            let (retry_instant, substituter) = self.try_change_to_offline(now);
+            let events = vec![
+                UpdateSubstituterEvent::NotifyUnavailable,
+                UpdateSubstituterEvent::ScheduleRetryReady(retry_instant),
+            ];
+            (substituter, events)
+        }
+    }
+
+    pub fn update_on_service_error(
+        self,
+        now: Instant,
+    ) -> (Substituter, Vec<UpdateSubstituterEvent>) {
+        if self.is_unavailable() {
+            (self, Vec::new())
+        } else {
+            let (retry_instant, substituter) = self.try_change_to_service_error(now);
+            let events = vec![
+                UpdateSubstituterEvent::NotifyUnavailable,
+                UpdateSubstituterEvent::ScheduleRetryReady(retry_instant),
+            ];
+            (substituter, events)
+        }
+    }
+
+    pub fn update_on_next_retry_ready(self) -> (Substituter, Vec<UpdateSubstituterEvent>) {
+        let events = vec![UpdateSubstituterEvent::ScheduleProbing(None)];
+        (self.on_next_retry_ready(), events)
+    }
+
+    pub fn update_on_probing_finished(
+        self,
+        probed_state: ProbedState,
+        periodic_probing: bool,
+        now: Instant,
+    ) -> (Substituter, Vec<UpdateSubstituterEvent>) {
+        match probed_state {
+            ProbedState::Normal => {
+                let substituter = self.try_change_to_normal();
+                let events = match (substituter.is_normal(), periodic_probing) {
+                    (true, true) => vec![
+                        UpdateSubstituterEvent::NotifyAvailable,
+                        UpdateSubstituterEvent::ScheduleProbing(Some(
+                            now + Availability::REPROBING_PERIOD,
+                        )),
+                    ],
+                    (true, false) => vec![UpdateSubstituterEvent::NotifyAvailable],
+                    (false, _) => Vec::new(),
+                };
+                (substituter, events)
+            }
+            ProbedState::Offline => self.update_on_service_offline(now),
+            ProbedState::ServiceError => self.update_on_service_error(now),
+        }
+    }
+
+    pub fn try_change_to_offline(mut self, now: Instant) -> (Instant, Self) {
+        self.availability = self.availability.try_change_to_offline(now);
         let retry_instant = now + self.availability.retry_duration().unwrap();
         (retry_instant, self)
     }
 
-    pub fn on_detected_service_error(mut self, now: Instant) -> (Instant, Self) {
-        self.availability = self.availability.change_to_service_error(now);
+    pub fn try_change_to_service_error(mut self, now: Instant) -> (Instant, Self) {
+        self.availability = self.availability.try_change_to_service_error(now);
         let retry_instant = now + self.availability.retry_duration().unwrap();
         (retry_instant, self)
     }
 
     pub fn on_next_retry_ready(mut self) -> Self {
-        self.availability = self.availability.change_to_maybe_ready();
+        self.availability = self.availability.try_change_to_maybe_ready();
         self
     }
 
-    pub fn on_detected_normal(mut self) -> Self {
-        self.availability = self.availability.change_to_normal();
+    pub fn try_change_to_normal(mut self) -> Self {
+        self.availability = self.availability.try_change_to_normal();
         self
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UpdateSubstituterEvent {
+    ScheduleRetryReady(Instant),
+    ScheduleProbing(Option<Instant>),
+    NotifyUnavailable,
+    NotifyAvailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ProbedState {
+    Normal,
+    Offline,
+    ServiceError,
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
+    use crate::domain::substituter::model::{Availability, Priority, SubstituterMeta, Url};
+
     use super::*;
 
-    fn make_substituter() -> Substituter {
+    fn make_substituter(availability: Availability) -> Substituter {
         let url = Url::new("https://cache.nixos.org").unwrap();
         let priority = Priority::new(40).unwrap();
-        Substituter::new(SubstituterMeta::new(url, priority), Availability::Normal)
+        let meta = SubstituterMeta::new(url, priority);
+        Substituter::new(meta, availability)
     }
 
     #[test]
-    fn on_detected_unavailable_transitions_to_unavailable() {
-        let sub = make_substituter();
-        assert!(!sub.is_unavailable());
-
-        let (_, sub) = sub.on_detected_service_error(Instant::now());
-        assert!(sub.is_unavailable());
+    fn update_on_service_successful_given_maybe_ready() {
+        let substituter = make_substituter(Availability::MaybeReady { prev_failures: 0 });
+        let (result, events) = substituter.update_on_service_successful();
+        assert!(!result.is_unavailable());
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0], UpdateSubstituterEvent::NotifyAvailable);
     }
 
     #[test]
-    fn on_detected_unavailable_returns_retry_instant() {
-        let sub = make_substituter();
+    fn update_on_service_failed_changes_state_from_normal() {
+        let substituter = make_substituter(Availability::Normal);
         let now = Instant::now();
-        let (retry, _) = sub.on_detected_service_error(now);
-        assert_eq!(retry, now + Duration::from_millis(500));
+
+        let (result, events) = substituter.update_on_service_error(now);
+
+        assert!(result.is_unavailable());
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            events[0],
+            UpdateSubstituterEvent::NotifyUnavailable
+        ));
+        assert!(matches!(
+            events[1],
+            UpdateSubstituterEvent::ScheduleRetryReady(t) if t == now + Duration::from_millis(500)
+        ));
     }
 
     #[test]
-    fn on_next_retry_ready_transitions_from_unavailable() {
-        let sub = make_substituter();
-        let (_, sub) = sub.on_detected_service_error(Instant::now());
-        assert!(sub.is_unavailable());
+    fn update_on_service_error_increments_backoff_given_repeated_error() {
+        let substituter = make_substituter(Availability::MaybeReady { prev_failures: 2 });
+        let now = Instant::now();
 
-        let sub = sub.on_next_retry_ready();
-        assert!(!sub.is_unavailable());
+        let (result, events) = substituter.update_on_service_error(now);
+
+        assert!(result.is_unavailable());
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            result.availability(),
+            Availability::ServiceError {
+                prev_failures: 3,
+                ..
+            }
+        ));
     }
 
     #[test]
-    fn on_detected_normal_doesnt_reset_availability_given_still_unavailable() {
-        let sub = make_substituter();
-        let (_, sub) = sub.on_detected_service_error(Instant::now());
-        assert!(sub.is_unavailable());
+    fn update_on_next_retry_ready_succeeds() {
+        let substituter = make_substituter(Availability::ServiceError {
+            detected_at: Instant::now(),
+            prev_failures: 0,
+        });
 
-        let sub = sub.on_detected_normal();
-        assert!(sub.is_unavailable());
+        let (result, events) = substituter.update_on_next_retry_ready();
+
+        assert!(!result.is_unavailable());
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            UpdateSubstituterEvent::ScheduleProbing(None),
+        ));
+    }
+
+    #[test]
+    fn update_on_probing_finished_succeeds_given_probed_state_normal() {
+        let substituter = make_substituter(Availability::MaybeReady { prev_failures: 0 });
+        let now = Instant::now();
+
+        let (result, events) =
+            substituter.update_on_probing_finished(ProbedState::Normal, true, now);
+
+        assert!(result.is_normal());
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], UpdateSubstituterEvent::NotifyAvailable));
+        assert!(matches!(
+            events[1],
+            UpdateSubstituterEvent::ScheduleProbing(Some(_)),
+        ));
+    }
+
+    #[test]
+    fn update_on_probing_finished_schedules_reprobing_given_already_normal() {
+        let substituter = make_substituter(Availability::Normal);
+        let now = Instant::now();
+
+        let (result, events) =
+            substituter.update_on_probing_finished(ProbedState::Normal, true, now);
+
+        assert!(result.is_normal());
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], UpdateSubstituterEvent::NotifyAvailable));
+        assert!(matches!(
+            events[1],
+            UpdateSubstituterEvent::ScheduleProbing(Some(_)),
+        ));
+    }
+
+    #[test]
+    fn update_on_probing_finished_emits_unavailable_given_offline() {
+        let substituter = make_substituter(Availability::MaybeReady { prev_failures: 0 });
+        let now = Instant::now();
+
+        let (result, events) =
+            substituter.update_on_probing_finished(ProbedState::Offline, true, now);
+
+        assert!(result.is_unavailable());
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            events[0],
+            UpdateSubstituterEvent::NotifyUnavailable,
+        ));
+        assert!(matches!(
+            events[1],
+            UpdateSubstituterEvent::ScheduleRetryReady(_),
+        ));
+    }
+
+    #[test]
+    fn update_on_probing_finished_emits_unavailable_given_service_error() {
+        let substituter = make_substituter(Availability::MaybeReady { prev_failures: 2 });
+        let now = Instant::now();
+
+        let (result, events) =
+            substituter.update_on_probing_finished(ProbedState::ServiceError, true, now);
+
+        assert!(result.is_unavailable());
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            events[0],
+            UpdateSubstituterEvent::NotifyUnavailable,
+        ));
+        assert!(matches!(
+            events[1],
+            UpdateSubstituterEvent::ScheduleRetryReady(_),
+        ));
     }
 }
