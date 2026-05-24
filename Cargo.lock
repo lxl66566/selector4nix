@@ -1584,6 +1584,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "fastrand",
  "reqwest",
  "tempfile",
  "tokio",
