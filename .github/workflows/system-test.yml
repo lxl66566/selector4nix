@@ -1,0 +1,59 @@
+name: System Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Build and run passthru.tests
+        run: |
+          system="$(nix eval --impure --expr 'builtins.currentSystem' --raw)"
+          tests="$(nix eval ".#packages.${system}.selector4nix.passthru.tests" \
+            --apply builtins.attrNames --json)"
+          echo "system=${system}"
+          echo "tests=${tests}"
+
+          echo "::group::Build selector4nix"
+          nix build ".#packages.${system}.selector4nix" -L --no-link --print-out-paths
+          echo "::endgroup::"
+
+          for name in $(echo "$tests" | jq -r '.[]'); do
+            echo "::group::Build passthru.tests.${name}"
+            nix build ".#packages.${system}.selector4nix.passthru.tests.${name}" \
+              -L --no-link --print-out-paths | tee "/tmp/test-${name}-path"
+            echo "::endgroup::"
+
+            echo "::group::Run passthru.tests.${name}"
+            store_path="$(cat "/tmp/test-${name}-path")"
+            bin="$(ls "$store_path/bin" | head -1)"
+            if [ -z "$bin" ]; then
+              echo "::error::no executable found in ${store_path}/bin"
+              exit 1
+            fi
+            "$store_path/bin/$bin"
+            echo "::endgroup::"
+          done
