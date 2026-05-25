@@ -24,47 +24,15 @@ pub trait Actor: Send {
 
                 next_state = tokio::select! {
                     Some(Ok(message)) = internal.join_next(), if !internal.is_empty() => {
-                        self.handle_internal(state, message).await
+                        self.on_internal(state, message).await
                     },
                     received = requests.recv() => match received {
-                        Some(message) => self.handle_request(state, message).await,
+                        Some(message) => self.on_request(state, message).await,
                         None => break,
                     },
                 };
             }
         });
-    }
-
-    fn handle_request(
-        &mut self,
-        state: Self::State,
-        message: Message<Self::Request>,
-    ) -> impl Future<Output = Option<Self::State>> + Send {
-        async {
-            match message {
-                Message::Main(request) => self.on_request(state, request).await,
-                Message::Shutdown => {
-                    self.on_shutdown(state).await;
-                    None
-                }
-            }
-        }
-    }
-
-    fn handle_internal(
-        &mut self,
-        state: Self::State,
-        message: Message<Self::Internal>,
-    ) -> impl Future<Output = Option<Self::State>> + Send {
-        async {
-            match message {
-                Message::Main(internal) => self.on_internal(state, internal).await,
-                Message::Shutdown => {
-                    self.on_shutdown(state).await;
-                    None
-                }
-            }
-        }
     }
 
     fn on_start(&mut self) -> impl Future<Output = Option<Self::State>> + Send;
@@ -91,8 +59,7 @@ pub trait Actor: Send {
 
     fn dispatch_internal<F>(&mut self, delay: Duration, fut: F)
     where
-        F: IntoFuture + Send + 'static,
-        F::Output: Into<Message<Self::Internal>>,
+        F: IntoFuture<Output = Self::Internal> + Send + 'static,
         F::IntoFuture: Send,
         Self::Internal: 'static,
     {
@@ -100,38 +67,26 @@ pub trait Actor: Send {
             if !delay.is_zero() {
                 tokio::time::sleep(delay).await;
             }
-            fut.into_future().await.into()
+            fut.into_future().await
         });
     }
 }
 
 pub struct Context<R, I> {
-    requests: Receiver<Message<R>>,
-    internal: JoinSet<Message<I>>,
+    requests: Receiver<R>,
+    internal: JoinSet<I>,
 }
 
 impl<R, I> Context<R, I> {
     pub const DEFAULT_REQUESTER_CAPACITY: usize = 64;
 
-    pub fn new(num_requests: usize) -> (Sender<Message<R>>, Self) {
+    pub fn new(num_requests: usize) -> (Sender<R>, Self) {
         let (sender, requests) = mpsc::channel(num_requests.max(1));
         let context = Context {
             requests,
             internal: JoinSet::new(),
         };
         (sender, context)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Message<M> {
-    Main(M),
-    Shutdown,
-}
-
-impl<M> From<M> for Message<M> {
-    fn from(msg: M) -> Self {
-        Self::Main(msg)
     }
 }
 
@@ -146,18 +101,10 @@ mod tests {
     async fn actor_handle_requests_succeeds() {
         let (sender, actor) = CounterActor::new(0);
         actor.run();
-        let _ = sender
-            .send(Message::Main(CounterActorRequest::Increase))
-            .await;
-        let _ = sender
-            .send(Message::Main(CounterActorRequest::AssertEqual(1)))
-            .await;
-        let _ = sender
-            .send(Message::Main(CounterActorRequest::Decrease))
-            .await;
-        let _ = sender
-            .send(Message::Main(CounterActorRequest::AssertEqual(0)))
-            .await;
+        let _ = sender.send(CounterActorRequest::Increase).await;
+        let _ = sender.send(CounterActorRequest::AssertEqual(1)).await;
+        let _ = sender.send(CounterActorRequest::Decrease).await;
+        let _ = sender.send(CounterActorRequest::AssertEqual(0)).await;
     }
 
     enum CounterActorRequest {
@@ -172,7 +119,7 @@ mod tests {
     }
 
     impl CounterActor {
-        fn new(init: i32) -> (Sender<Message<CounterActorRequest>>, Self) {
+        fn new(init: i32) -> (Sender<CounterActorRequest>, Self) {
             let (sender, context) = Context::new(16);
             let actor = Self {
                 context,

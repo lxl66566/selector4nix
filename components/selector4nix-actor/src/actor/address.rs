@@ -2,7 +2,7 @@ use tokio::sync::mpsc::error::{SendError, TrySendError};
 use tokio::sync::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 
-use crate::actor::{Actor, Message};
+use crate::actor::Actor;
 
 #[derive(Debug)]
 pub struct Address<A: Actor> {
@@ -10,7 +10,7 @@ pub struct Address<A: Actor> {
 }
 
 impl<A: Actor> Address<A> {
-    pub fn mock() -> (Self, MpscReceiver<Message<A::Request>>) {
+    pub fn mock() -> (Self, MpscReceiver<A::Request>) {
         let (inner, receiver) = AnyAddress::mock();
         (Self { inner }, receiver)
     }
@@ -41,10 +41,6 @@ impl<A: Actor> Address<A> {
         self.inner.try_ask(preparation).await
     }
 
-    pub async fn shutdown(self) {
-        self.inner.shutdown().await
-    }
-
     pub fn is_closed(&self) -> bool {
         self.inner.is_closed()
     }
@@ -70,8 +66,8 @@ impl<A: Actor> PartialEq for Address<A> {
 
 impl<A: Actor> Eq for Address<A> {}
 
-impl<A: Actor> From<MpscSender<Message<A::Request>>> for Address<A> {
-    fn from(sender: MpscSender<Message<A::Request>>) -> Self {
+impl<A: Actor> From<MpscSender<A::Request>> for Address<A> {
+    fn from(sender: MpscSender<A::Request>) -> Self {
         Self {
             inner: AnyAddress::from(sender),
         }
@@ -80,33 +76,27 @@ impl<A: Actor> From<MpscSender<Message<A::Request>>> for Address<A> {
 
 #[derive(Debug)]
 pub struct AnyAddress<R> {
-    sender: MpscSender<Message<R>>,
+    sender: MpscSender<R>,
 }
 
 impl<R> AnyAddress<R> {
-    pub fn mock() -> (Self, MpscReceiver<Message<R>>) {
+    pub fn mock() -> (Self, MpscReceiver<R>) {
         let (sender, receiver) = mpsc::channel(64);
         (sender.into(), receiver)
     }
 
     pub async fn tell(&self, request: R) -> Result<(), TellError<R>> {
-        match self.sender.send(Message::Main(request)).await {
+        match self.sender.send(request).await {
             Ok(()) => Ok(()),
-            Err(SendError(Message::Main(request))) => Err(TellError(request)),
-            Err(_) => {
-                unreachable!("`tell(..)` should not send messages other than `Message::Main(..)`")
-            }
+            Err(SendError(request)) => Err(TellError(request)),
         }
     }
 
     pub fn try_tell(&self, request: R) -> Result<(), TryTellError<R>> {
-        match self.sender.try_send(Message::Main(request)) {
+        match self.sender.try_send(request) {
             Ok(()) => Ok(()),
-            Err(TrySendError::Full(Message::Main(request))) => Err(TryTellError::Full(request)),
-            Err(TrySendError::Closed(Message::Main(request))) => Err(TryTellError::Closed(request)),
-            Err(_) => unreachable!(
-                "`try_tell(..)` should not send messages other than `Message::Main(..)`"
-            ),
+            Err(TrySendError::Full(request)) => Err(TryTellError::Full(request)),
+            Err(TrySendError::Closed(request)) => Err(TryTellError::Closed(request)),
         }
     }
 
@@ -131,10 +121,6 @@ impl<R> AnyAddress<R> {
         self.try_tell(request)
             .map_err(|err| TryAskError::Tell(err))?;
         reply.await.map_err(|_| TryAskError::Receive)
-    }
-
-    pub async fn shutdown(self) {
-        let _ = self.sender.send(Message::Shutdown).await;
     }
 
     pub fn is_closed(&self) -> bool {
@@ -162,8 +148,8 @@ impl<R> PartialEq for AnyAddress<R> {
 
 impl<R> Eq for AnyAddress<R> {}
 
-impl<R> From<MpscSender<Message<R>>> for AnyAddress<R> {
-    fn from(sender: MpscSender<Message<R>>) -> Self {
+impl<R> From<MpscSender<R>> for AnyAddress<R> {
+    fn from(sender: MpscSender<R>) -> Self {
         Self { sender }
     }
 }
