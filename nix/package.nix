@@ -1,27 +1,24 @@
 {
+  callPackage,
   lib,
   rustPlatform,
 }:
 
-rustPlatform.buildRustPackage {
+rustPlatform.buildRustPackage (finalAttrs: {
   pname = "selector4nix";
   version = "0.4.2";
 
-  src = lib.fileset.toSource {
-    root = ../.;
-    fileset = lib.fileset.unions [
-      ../Cargo.toml
-      ../Cargo.lock
-      ../docs/selector4nix.example.toml
-      ../docs/credentials.example.toml
-      ../components
-      ../src
-      ../tests
-    ];
-  };
+  src = import ./source.nix { inherit lib; };
 
   cargoLock = {
     lockFile = ../Cargo.lock;
+  };
+
+  passthru.tests = {
+    system-test-nar-info-querying = callPackage ../tests/system/nar-info-querying/package.nix {
+      inherit rustPlatform;
+      selector4nix = finalAttrs.finalPackage;
+    };
   };
 
   meta = {
@@ -32,4 +29,4 @@ rustPlatform.buildRustPackage {
     maintainers = with lib.maintainers; [ starryreverie ];
     platforms = lib.platforms.unix;
   };
-}
+})
