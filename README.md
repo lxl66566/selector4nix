@@ -196,6 +196,9 @@ In your NixOS, nix-darwin, or Home Manager configuration:
     # Alternatives are "keep" (default) and "prepend".
     configureSubstituter = "overwrite";
 
+    # Optional: see Credentials section for detials.
+    # credentialFile = "/path/to/my/credentials.toml";
+
     settings = {
       substituters = [
         {
