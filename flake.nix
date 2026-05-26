@@ -1,27 +1,14 @@
 {
-  description = "Rust Development Environment for selector4nix";
+  description = "Nix Flake of selector4nix";
 
   inputs = {
-    flake-compat = {
-      url = "https://git.lix.systems/lix-project/flake-compat/archive/main.tar.gz";
-    };
-
     flake-parts = {
       url = "github:hercules-ci/flake-parts/main";
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
 
-    import-tree = {
-      url = "github:vic/import-tree/main";
-    };
-
     nixpkgs = {
       url = "github:NixOS/nixpkgs/nixos-unstable";
-    };
-
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay/master";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -35,6 +22,26 @@
         "aarch64-darwin"
       ];
 
-      imports = (inputs.import-tree.withLib inputs.nixpkgs.lib).leafs ./nix/flake;
+      imports = [
+        inputs.flake-parts.flakeModules.partitions
+
+        ./nix/flake/inputs.nix
+        ./nix/flake/module.nix
+        ./nix/flake/overlay.nix
+        ./nix/flake/package.nix
+      ];
+
+      partitions = {
+        dev = {
+          module = ./nix/flake/dev;
+          extraInputsFlake = ./nix/flake/dev;
+        };
+      };
+
+      partitionedAttrs = {
+        checks = "dev";
+        devShells = "dev";
+        formatter = "dev";
+      };
     };
 }
