@@ -1,5 +1,7 @@
 {
   config,
+  inputs,
+  self,
   flake-parts-lib,
   withSystem,
   ...
