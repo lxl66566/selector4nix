@@ -26,16 +26,16 @@ impl Substituter {
         self.target.priority()
     }
 
-    pub fn grace(&self, tolerance: i64) -> i64 {
-        -(tolerance * self.priority().value() as i64)
-    }
-
     pub fn prev_failures(&self) -> usize {
         self.availability.prev_failures()
     }
 
     pub fn is_normal(&self) -> bool {
         matches!(&self.availability, Availability::Normal)
+    }
+
+    pub fn is_maybe_ready(&self) -> bool {
+        matches!(&self.availability, Availability::MaybeReady { .. })
     }
 
     pub fn is_unavailable(&self) -> bool {

@@ -1,26 +1,25 @@
 use std::sync::Arc;
 
 use snafu::Snafu;
-use tracing;
 
 use crate::domain::nar_file::model::{NarFile, NarFileLocation};
 use crate::domain::nar_file::port::{NarStreamData, NarStreamProvider};
 use crate::domain::nar_info::model::NarFileName;
-use crate::domain::substituter::index::SubstituterAvailabilityIndex;
+use crate::domain::substituter::SubstituterRepository;
 
 pub struct NarFileService {
     nar_stream_provider: Arc<dyn NarStreamProvider>,
-    substituter_availability_index: Arc<dyn SubstituterAvailabilityIndex>,
+    substituter_repository: Arc<dyn SubstituterRepository>,
 }
 
 impl NarFileService {
     pub fn new(
         nar_stream_provider: Arc<dyn NarStreamProvider>,
-        substituter_availability_index: Arc<dyn SubstituterAvailabilityIndex>,
+        substituter_repository: Arc<dyn SubstituterRepository>,
     ) -> Self {
         Self {
             nar_stream_provider,
-            substituter_availability_index,
+            substituter_repository,
         }
     }
 
@@ -45,7 +44,7 @@ impl NarFileService {
             tracing::trace!(nar_file = %nar_file_name.value(), "query all substituters for nar file location");
         }
 
-        let candidates = self.build_candidates_from_all(&nar_file_name);
+        let candidates = self.build_candidates_from_all(&nar_file_name).await;
         self.stream_from_all(nar_file, candidates).await
     }
 
@@ -69,13 +68,14 @@ impl NarFileService {
         }
     }
 
-    fn build_candidates_from_all(&self, nar_file_name: &NarFileName) -> Vec<NarFileLocation> {
-        self.substituter_availability_index
-            .query_all()
+    async fn build_candidates_from_all(&self, nar_file_name: &NarFileName) -> Vec<NarFileLocation> {
+        self.substituter_repository
+            .query_all_available()
+            .await
             .iter()
             .map(|sub| {
-                let source_url = nar_file_name.with_storage_prefix(sub.target().storage_url());
-                let timeout = sub.target().nar_timeout();
+                let source_url = nar_file_name.with_storage_prefix(sub.meta().storage_url());
+                let timeout = sub.meta().nar_timeout();
                 NarFileLocation::new(source_url, timeout)
             })
             .collect()
