@@ -1619,6 +1619,7 @@ dependencies = [
  "getset",
  "moka",
  "postcard",
+ "redb",
  "reqwest",
  "selector4nix-actor",
  "selector4nix-db",
