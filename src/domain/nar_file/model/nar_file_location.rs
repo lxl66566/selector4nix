@@ -1,10 +1,11 @@
 use std::time::Duration;
 
 use getset::{CopyGetters, Getters};
+use serde::{Deserialize, Serialize};
 
 use crate::domain::common::url::Url;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Getters, CopyGetters)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Getters, CopyGetters, Serialize, Deserialize)]
 pub struct NarFileLocation {
     #[getset(get = "pub")]
     source_url: Url,

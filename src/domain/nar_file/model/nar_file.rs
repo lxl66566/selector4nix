@@ -1,11 +1,12 @@
 use std::time::SystemTime;
 
 use getset::Getters;
+use serde::{Deserialize, Serialize};
 
 use crate::domain::common::expire_at::ExpireAt;
 use crate::domain::nar_file::model::{NarFileKey, NarFileLocation};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Getters)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Getters, Serialize, Deserialize)]
 pub struct NarFile {
     #[getset(get = "pub")]
     key: NarFileKey,
