@@ -174,11 +174,17 @@ pub async fn init_context(
         CacheKvNarInfoRepository::new(cache_kv)
     });
 
+    let nar_file_repository = Arc::new({
+        let cache_kv = Arc::new(CacheKv::new(database.clone(), "nar_file".into()));
+        CacheKvNarFileRepository::new(cache_kv)
+    });
+
     let substituter_service = Arc::new(SubstituterService::new(config.network.periodic_probing));
 
     let nar_file_service = Arc::new(NarFileService::new(
         nar_stream_provider,
         substituter_repository.clone(),
+        config.cache.nar_location_ttl,
     ));
 
     let nar_info_service = Arc::new(NarInfoService::new(
@@ -212,20 +218,6 @@ pub async fn init_context(
         registry
     });
 
-    let nar_file_registry = Arc::new(
-        RegistryBuilder::new()
-            .capacity(CapacityOption::Lru(config.cache.nar_location_capacity))
-            .expiration(ExpirationOption::Ttl(config.cache.nar_location_ttl))
-            .factory(AsyncFactory::new({
-                let svc = nar_file_service.clone();
-                move |key: &NarFileKey| {
-                    let addr = NarFileActor::new(key.clone(), svc.clone()).run();
-                    async move { addr }
-                }
-            }))
-            .build(),
-    );
-
     let nar_info_registry = Arc::new(
         RegistryBuilder::new()
             .capacity(CapacityOption::Lru(config.cache.nar_info_lookup_capacity))
@@ -240,6 +232,28 @@ pub async fn init_context(
                         nar_info_service.clone(),
                         nar_info_repository.clone(),
                         nar_info_ttl,
+                    )
+                    .run();
+                    async move { addr }
+                }
+            }))
+            .build(),
+    );
+
+    let nar_file_registry = Arc::new(
+        RegistryBuilder::new()
+            .capacity(CapacityOption::Lru(config.cache.nar_location_capacity))
+            .expiration(ExpirationOption::Ttl(config.cache.nar_location_ttl))
+            .factory(AsyncFactory::new({
+                let nar_file_servicee = nar_file_service.clone();
+                let nar_file_repository = nar_file_repository.clone();
+                let nar_file_ttl = config.cache.nar_location_ttl;
+                move |key: &NarFileKey| {
+                    let addr = NarFileActor::new(
+                        key.clone(),
+                        nar_file_servicee.clone(),
+                        nar_file_repository.clone(),
+                        nar_file_ttl,
                     )
                     .run();
                     async move { addr }

@@ -1,8 +1,9 @@
 use getset::Getters;
+use serde::{Deserialize, Serialize};
 
 use crate::domain::nar_info::model::NarFileName;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Getters)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Getters, Serialize, Deserialize)]
 pub struct NarFileKey {
     #[getset(get = "pub")]
     file_hash: String,
