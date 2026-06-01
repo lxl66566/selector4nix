@@ -2,7 +2,20 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result as AnyhowResult, bail};
+use fastrand::Rng;
 use tempfile::TempDir;
+
+pub fn generate_random_bytes(len: usize, rng: &mut Rng) -> Vec<u8> {
+    (0..len).map(|_| rng.u8(..)).collect()
+}
+
+pub fn generate_hash(rng: &mut Rng) -> String {
+    const NIX_BASE32_CHARSET: &[u8] = b"0123456789abcdfghijklmnpqrsvwxyz";
+    rng.choose_multiple(NIX_BASE32_CHARSET.iter(), 32)
+        .iter()
+        .map(|c| **c as char)
+        .collect()
+}
 
 pub struct NixStoreEntry {
     pub name: String,

@@ -1,19 +1,18 @@
 mod assertions;
 mod cli;
 mod context;
-mod fixture;
 
 use std::collections::HashSet;
 
 use anyhow::{Context, Result as AnyhowResult};
 use fastrand::Rng;
 use reqwest::{Client, Response};
+use selector4nix_system_test_common::nix_store::{generate_hash, generate_random_bytes};
 use selector4nix_system_test_common::selector4nix::Selector4NixInstance;
 use url::Url;
 
 use crate::assertions::*;
 use crate::context::TestContext;
-use crate::fixture::{generate_hash, generate_test_contents};
 
 #[tokio::main]
 async fn main() -> AnyhowResult<()> {
@@ -22,7 +21,10 @@ async fn main() -> AnyhowResult<()> {
     let seed = config.seed;
     let repeat = config.repeat;
 
-    let contents = generate_test_contents(count, seed);
+    let mut rng = Rng::with_seed(seed);
+    let contents: Vec<Vec<u8>> = (0..count)
+        .map(|_| generate_random_bytes(rng.usize(1..100_000), &mut rng))
+        .collect();
     let context = TestContext::init(&contents, &config).await?;
     eprintln!("shared context ready. populated {count} files (seed=`{seed}`, repeat=`{repeat}`)");
 
