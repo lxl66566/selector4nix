@@ -8,9 +8,10 @@ use std::collections::HashSet;
 use anyhow::{Context, Result as AnyhowResult};
 
 use assertions::*;
-use context::{ProxyInstance, SharedContext};
+use context::SharedContext;
 use fastrand::Rng;
 use fixture::TestFixtures;
+use selector4nix_system_test_common::selector4nix::Selector4NixInstance;
 
 #[tokio::main]
 async fn main() -> AnyhowResult<()> {
@@ -20,7 +21,7 @@ async fn main() -> AnyhowResult<()> {
     let repeat = paths.repeat;
 
     let fixtures = TestFixtures::new(count, seed);
-    let mut shared = SharedContext::init(fixtures, &paths).await?;
+    let shared = SharedContext::init(fixtures, &paths).await?;
     eprintln!("shared context ready. populated {count} files (seed=`{seed}`, repeat=`{repeat}`)");
 
     let mut seed_index = 0usize;
@@ -78,10 +79,10 @@ fn derive_seed(base: u64, index: usize) -> u64 {
 
 async fn valid_hash_returns_narinfo(
     shared: &SharedContext,
-    proxy: &ProxyInstance,
+    proxy: &Selector4NixInstance,
 ) -> AnyhowResult<()> {
     for hash in shared.fixtures().valid_hashes() {
-        let response = fetch_nar_info(shared.client(), proxy.proxy_base_url(), hash).await?;
+        let response = fetch_nar_info(shared.client(), proxy.base_url(), hash).await?;
         assert_nar_info_ok(response, hash)
             .await
             .with_context(|| format!("`hash={hash}`"))?;
@@ -91,7 +92,7 @@ async fn valid_hash_returns_narinfo(
 
 async fn invalid_hash_returns_404(
     shared: &SharedContext,
-    proxy: &ProxyInstance,
+    proxy: &Selector4NixInstance,
     rng: &mut Rng,
 ) -> AnyhowResult<()> {
     let valid_set: HashSet<&str> = shared.fixtures().valid_hashes().into_iter().collect();
@@ -102,7 +103,7 @@ async fn invalid_hash_returns_404(
         if valid_set.contains(hash.as_str()) {
             continue;
         }
-        let response = fetch_nar_info(shared.client(), proxy.proxy_base_url(), &hash).await?;
+        let response = fetch_nar_info(shared.client(), proxy.base_url(), &hash).await?;
         assert_nar_info_not_found(response, &hash).await?;
         generated += 1;
     }
@@ -111,20 +112,20 @@ async fn invalid_hash_returns_404(
 
 async fn same_hash_idempotent(
     shared: &SharedContext,
-    proxy: &ProxyInstance,
+    proxy: &Selector4NixInstance,
     rng: &mut Rng,
 ) -> AnyhowResult<()> {
     let hashes = shared.fixtures().valid_hashes();
     let sampled = sample_hashes(&hashes, 30, rng);
 
     for hash in sampled {
-        let response1 = fetch_nar_info(shared.client(), proxy.proxy_base_url(), hash).await?;
+        let response1 = fetch_nar_info(shared.client(), proxy.base_url(), hash).await?;
         let body1 = assert_nar_info_ok_get_body(response1, hash).await?;
 
-        let response2 = fetch_nar_info(shared.client(), proxy.proxy_base_url(), hash).await?;
+        let response2 = fetch_nar_info(shared.client(), proxy.base_url(), hash).await?;
         let body2 = assert_nar_info_ok_get_body(response2, hash).await?;
 
-        let response3 = fetch_nar_info(shared.client(), proxy.proxy_base_url(), hash).await?;
+        let response3 = fetch_nar_info(shared.client(), proxy.base_url(), hash).await?;
         let body3 = assert_nar_info_ok_get_body(response3, hash).await?;
 
         if body1 != body2 || body2 != body3 {
@@ -138,14 +139,14 @@ async fn same_hash_idempotent(
 
 async fn concurrent_fetches_correct(
     shared: &SharedContext,
-    proxy: &ProxyInstance,
+    proxy: &Selector4NixInstance,
 ) -> AnyhowResult<()> {
     let hashes = shared.fixtures().valid_hashes();
     let mut tasks = Vec::with_capacity(hashes.len());
 
     for hash in &hashes {
         let client = shared.client().clone();
-        let base_url = proxy.proxy_base_url().to_string();
+        let base_url = proxy.base_url().clone();
         let hash = hash.to_string();
         tasks.push(tokio::spawn(async move {
             let response = fetch_nar_info(&client, &base_url, &hash).await?;
@@ -163,7 +164,7 @@ async fn concurrent_fetches_correct(
 
 async fn mixed_valid_invalid(
     shared: &SharedContext,
-    proxy: &ProxyInstance,
+    proxy: &Selector4NixInstance,
     rng: &mut Rng,
 ) -> AnyhowResult<()> {
     let valid_hashes = shared.fixtures().valid_hashes();
@@ -174,7 +175,7 @@ async fn mixed_valid_invalid(
     for _ in 0..total {
         let is_valid = rng.bool();
         let client = shared.client().clone();
-        let base_url = proxy.proxy_base_url().to_string();
+        let base_url = proxy.base_url().clone();
 
         if is_valid {
             let hash = valid_hashes[rng.usize(..valid_hashes.len())].to_string();

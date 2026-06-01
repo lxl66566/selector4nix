@@ -1,14 +1,17 @@
 use anyhow::{Context, Result as AnyhowResult, bail};
 use reqwest::Response;
+use url::Url;
 
 pub async fn fetch_nar_info(
     client: &reqwest::Client,
-    base_url: &str,
+    base_url: &Url,
     hash: &str,
 ) -> AnyhowResult<Response> {
-    let url = format!("{base_url}/{hash}.narinfo");
+    let url = base_url
+        .join(&format!("{hash}.narinfo"))
+        .with_context(|| format!("failed to construct URL for `{hash}`"))?;
     client
-        .get(&url)
+        .get(url)
         .send()
         .await
         .with_context(|| format!("HTTP request failed for `{hash}`"))

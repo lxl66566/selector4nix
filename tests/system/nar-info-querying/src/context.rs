@@ -5,8 +5,10 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result as AnyhowResult, bail};
 use reqwest::Client;
 use selector4nix_system_test_common::net::allocate_port;
+use selector4nix_system_test_common::selector4nix::Selector4NixInstance;
 use selector4nix_system_test_common::subprocess::SubprocessGuard;
 use tempfile::TempDir;
+use url::Url;
 
 use crate::cli::ResolvedPaths;
 use crate::fixture::TestFixtures;
@@ -21,12 +23,6 @@ pub struct SharedContext {
     client: Client,
     fixtures: TestFixtures,
     selector4nix_bin: PathBuf,
-    proxy_counter: u64,
-}
-
-pub struct ProxyInstance {
-    _guard: SubprocessGuard,
-    proxy_base_url: String,
 }
 
 impl SharedContext {
@@ -54,46 +50,16 @@ impl SharedContext {
             client,
             fixtures,
             selector4nix_bin: paths.selector4nix.clone(),
-            proxy_counter: 0,
         })
     }
 
-    pub async fn start_proxy(&mut self) -> AnyhowResult<ProxyInstance> {
-        let proxy_port = allocate_port();
-        let config_name = format!("selector4nix-{}.toml", self.proxy_counter);
-        self.proxy_counter += 1;
-
-        let config_path = self._tempdir.path().join(&config_name);
-        let config_content = format!(
-            r#"[server]
-ip = "127.0.0.1"
-port = {proxy_port}
-
-[network]
-periodic_probing = false
-
-[[substituters]]
-url = "http://127.0.0.1:{upstream_port}/"
-"#,
-            upstream_port = self.upstream_port,
-        );
-        std::fs::write(&config_path, &config_content).context("failed to write config")?;
-
-        let child = Command::new(&self.selector4nix_bin)
-            .args(["--config-file", &config_path.to_string_lossy()])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("failed to spawn `selector4nix`")?;
-
-        let proxy_base_url = format!("http://127.0.0.1:{proxy_port}");
-
-        wait_ready(&self.client, &proxy_base_url).await?;
-
-        Ok(ProxyInstance {
-            _guard: SubprocessGuard::new(child),
-            proxy_base_url,
-        })
+    pub async fn start_proxy(&self) -> AnyhowResult<Selector4NixInstance> {
+        let upstream_url = Url::parse(&format!("http://127.0.0.1:{}/", self.upstream_port))
+            .context("failed to construct upstream URL")?;
+        Selector4NixInstance::builder(self.selector4nix_bin.clone(), self.client.clone())
+            .substituter(upstream_url)
+            .start()
+            .await
     }
 
     pub fn client(&self) -> &Client {
@@ -102,12 +68,6 @@ url = "http://127.0.0.1:{upstream_port}/"
 
     pub fn fixtures(&self) -> &TestFixtures {
         &self.fixtures
-    }
-}
-
-impl ProxyInstance {
-    pub fn proxy_base_url(&self) -> &str {
-        &self.proxy_base_url
     }
 }
 
@@ -137,22 +97,6 @@ async fn wait_nix_serve_ready(client: &Client, cache_dir: &Path, port: u16) -> A
                     bail!(
                         "`nix-serve` did not become ready within {READINESS_TIMEOUT:?} (probed `{stem}`)"
                     );
-                }
-                tokio::time::sleep(POLL_INTERVAL).await;
-            }
-        }
-    }
-}
-
-async fn wait_ready(client: &Client, proxy_base_url: &str) -> AnyhowResult<()> {
-    let start = Instant::now();
-    let url = format!("{proxy_base_url}/nix-cache-info");
-    loop {
-        match client.get(&url).send().await {
-            Ok(response) if response.status().is_success() => return Ok(()),
-            _ => {
-                if start.elapsed() > READINESS_TIMEOUT {
-                    bail!("`selector4nix` did not become ready within {READINESS_TIMEOUT:?}");
                 }
                 tokio::time::sleep(POLL_INTERVAL).await;
             }

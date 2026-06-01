@@ -1660,6 +1660,7 @@ dependencies = [
  "reqwest",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -1673,6 +1674,7 @@ dependencies = [
  "selector4nix-system-test-common",
  "tempfile",
  "tokio",
+ "url",
  "which",
 ]
 
