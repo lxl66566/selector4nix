@@ -1,25 +1,19 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::process::Command;
 
 use anyhow::{Context, Result as AnyhowResult, bail};
 use reqwest::Client;
-use selector4nix_system_test_common::net::allocate_port;
+use selector4nix_system_test_common::nix_serve::NixServeInstance;
 use selector4nix_system_test_common::selector4nix::Selector4NixInstance;
-use selector4nix_system_test_common::subprocess::SubprocessGuard;
 use tempfile::TempDir;
 use url::Url;
 
 use crate::cli::ResolvedPaths;
 use crate::fixture::TestFixtures;
 
-const READINESS_TIMEOUT: Duration = Duration::from_secs(30);
-const POLL_INTERVAL: Duration = Duration::from_millis(100);
-
 pub struct SharedContext {
     _tempdir: TempDir,
-    _nix_serve: SubprocessGuard,
-    upstream_port: u16,
+    nix_serve: NixServeInstance,
     client: Client,
     fixtures: TestFixtures,
     selector4nix_bin: PathBuf,
@@ -33,20 +27,17 @@ impl SharedContext {
 
         populate_cache(&mut fixtures, &cache_dir, &paths.nix)?;
 
-        let upstream_port = allocate_port();
-        let _nix_serve = start_nix_serve(&paths.nix_serve, &cache_dir, upstream_port)?;
-
         let client = Client::builder()
-            .timeout(Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(10))
             .build()
             .context("failed to build HTTP client")?;
 
-        wait_nix_serve_ready(&client, &cache_dir, upstream_port).await?;
+        let nix_serve =
+            NixServeInstance::start(&paths.nix_serve, &cache_dir, client.clone()).await?;
 
         Ok(Self {
             _tempdir: tempdir,
-            _nix_serve,
-            upstream_port,
+            nix_serve,
             client,
             fixtures,
             selector4nix_bin: paths.selector4nix.clone(),
@@ -54,8 +45,8 @@ impl SharedContext {
     }
 
     pub async fn start_proxy(&self) -> AnyhowResult<Selector4NixInstance> {
-        let upstream_url = Url::parse(&format!("http://127.0.0.1:{}/", self.upstream_port))
-            .context("failed to construct upstream URL")?;
+        let upstream_url =
+            Url::parse(&format!("http://127.0.0.1:{}/", self.nix_serve.port())).unwrap();
         Selector4NixInstance::builder(self.selector4nix_bin.clone(), self.client.clone())
             .substituter(upstream_url)
             .start()
@@ -68,39 +59,6 @@ impl SharedContext {
 
     pub fn fixtures(&self) -> &TestFixtures {
         &self.fixtures
-    }
-}
-
-async fn wait_nix_serve_ready(client: &Client, cache_dir: &Path, port: u16) -> AnyhowResult<()> {
-    let first_hash = std::fs::read_dir(cache_dir)
-        .context("failed to read cache dir")?
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().extension().is_some_and(|ext| ext == "narinfo"))
-        .map(|e| e.path());
-
-    let Some(narinfo_path) = first_hash else {
-        bail!("no .narinfo files found in cache directory");
-    };
-    let stem = narinfo_path
-        .file_stem()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
-
-    let probe_url = format!("http://127.0.0.1:{port}/{stem}.narinfo");
-    let start = Instant::now();
-    loop {
-        match client.get(&probe_url).send().await {
-            Ok(resp) if resp.status().is_success() => return Ok(()),
-            _ => {
-                if start.elapsed() > READINESS_TIMEOUT {
-                    bail!(
-                        "`nix-serve` did not become ready within {READINESS_TIMEOUT:?} (probed `{stem}`)"
-                    );
-                }
-                tokio::time::sleep(POLL_INTERVAL).await;
-            }
-        }
     }
 }
 
@@ -141,20 +99,4 @@ fn populate_cache(
         fixtures.add_populated(hash.to_string());
     }
     Ok(())
-}
-
-fn start_nix_serve(
-    nix_serve_bin: &Path,
-    cache_dir: &Path,
-    port: u16,
-) -> AnyhowResult<SubprocessGuard> {
-    let store_uri = format!("file://{}", cache_dir.display());
-    let child = Command::new(nix_serve_bin)
-        .args(["--store", &store_uri, "--port", &port.to_string()])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("failed to spawn `nix-serve`")?;
-
-    Ok(SubprocessGuard::new(child))
 }
