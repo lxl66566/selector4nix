@@ -49,7 +49,7 @@ Timeout in seconds for NAR file downloads, also used as connect timeout.
 - Type: Natural
 - Default: `12`
 
-Maximum number of concurrent outgoing HTTP requests.
+Maximum number of concurrent outgoing HTTP requests for NAR file streaming.
 
 ### `network.tolerance_msecs`
 
