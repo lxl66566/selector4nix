@@ -140,7 +140,6 @@ pub async fn init_context(
     let nar_info_provider = Arc::new(ReqwestNarInfoProvider::new(
         http_client.clone(),
         config.network.nar_info_timeout,
-        concurrency.clone(),
         credentials.clone(),
     ));
 

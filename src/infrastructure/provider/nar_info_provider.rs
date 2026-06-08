@@ -5,7 +5,6 @@ use anyhow::Error as AnyhowError;
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use snafu::ResultExt;
-use tokio::sync::Semaphore;
 
 use crate::domain::common::url::Url;
 use crate::domain::nar_info::model::UpstreamNarInfoData;
@@ -16,21 +15,14 @@ use crate::infrastructure::config::AppCredential;
 pub struct ReqwestNarInfoProvider {
     client: Client,
     default_timeout: Duration,
-    concurrency: Arc<Semaphore>,
     credentials: Arc<AppCredential>,
 }
 
 impl ReqwestNarInfoProvider {
-    pub fn new(
-        client: Client,
-        default_timeout: Duration,
-        concurrency: Arc<Semaphore>,
-        credentials: Arc<AppCredential>,
-    ) -> Self {
+    pub fn new(client: Client, default_timeout: Duration, credentials: Arc<AppCredential>) -> Self {
         Self {
             client,
             default_timeout,
-            concurrency,
             credentials,
         }
     }
@@ -44,8 +36,6 @@ impl NarInfoProvider for ReqwestNarInfoProvider {
         timeout: Option<Duration>,
     ) -> Result<Option<NarInfoQueryData>, QueryNarInfoError> {
         tracing::debug!(%url, "fetching nar info from substituter");
-
-        let _permit = self.concurrency.acquire().await.unwrap();
 
         let timeout = timeout.unwrap_or(self.default_timeout);
         let request = self.client.get(url.value()).timeout(timeout);
