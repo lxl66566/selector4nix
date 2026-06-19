@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Path, State};
-use axum::http::{Response, header};
+use http::{HeaderMap, Response, header};
 
 use crate::api::state::AppContext;
 use crate::application::{AppError, AppErrorKind};

@@ -3,7 +3,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::Error as AnyhowError;
 use async_trait::async_trait;
-use reqwest::{Client, StatusCode};
+use http::StatusCode;
+use reqwest::Client;
 use snafu::ResultExt;
 
 use crate::domain::common::url::Url;

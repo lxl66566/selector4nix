@@ -3,7 +3,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result as AnyhowResult};
 use async_trait::async_trait;
 use futures::StreamExt;
-use reqwest::{Client, Response, StatusCode};
+use http::{StatusCode, header};
+use reqwest::{Client, Response};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
@@ -36,12 +37,12 @@ impl ReqwestNarStreamProvider {
             content_length: response.content_length(),
             content_type: response
                 .headers()
-                .get(reqwest::header::CONTENT_TYPE)
+                .get(header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
                 .map(ToString::to_string),
             content_encoding: response
                 .headers()
-                .get(reqwest::header::CONTENT_ENCODING)
+                .get(header::CONTENT_ENCODING)
                 .and_then(|v| v.to_str().ok())
                 .map(ToString::to_string),
         };
