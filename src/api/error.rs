@@ -1,5 +1,5 @@
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use http::StatusCode;
 
 use crate::application::{AppError, AppErrorKind};
 

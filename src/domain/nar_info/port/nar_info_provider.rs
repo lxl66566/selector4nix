@@ -4,6 +4,7 @@ use anyhow::Error as AnyhowError;
 use async_trait::async_trait;
 use snafu::Snafu;
 
+use crate::domain::common::passthrough_headers::PassthroughHeaders;
 use crate::domain::common::url::Url;
 use crate::domain::nar_info::model::UpstreamNarInfoData;
 
@@ -12,6 +13,7 @@ pub trait NarInfoProvider: Send + Sync {
     async fn query_nar_info(
         &self,
         url: &Url,
+        headers: &PassthroughHeaders,
         timeout: Option<Duration>,
     ) -> Result<Option<NarInfoQueryData>, QueryNarInfoError>;
 }
