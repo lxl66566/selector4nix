@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use selector4nix::domain::common::passthrough_headers::PassthroughHeaders;
 use selector4nix::domain::common::url::Url;
 use selector4nix::domain::nar_info::port::error_ctx::{OfflineSnafu, ServiceSnafu};
 use selector4nix::domain::nar_info::port::{NarInfoProvider, NarInfoQueryData, QueryNarInfoError};
@@ -28,6 +29,7 @@ impl NarInfoProvider for MockNarInfoProvider {
     async fn query_nar_info(
         &self,
         url: &Url,
+        _headers: &PassthroughHeaders,
         timeout: Option<Duration>,
     ) -> Result<Option<NarInfoQueryData>, QueryNarInfoError> {
         let Some(data) = self.queries.get(url) else {

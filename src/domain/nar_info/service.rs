@@ -6,6 +6,7 @@ use snafu::Snafu;
 use tokio::task::JoinSet;
 use tokio::time::Instant;
 
+use crate::domain::common::passthrough_headers::PassthroughHeaders;
 use crate::domain::common::url::Url;
 use crate::domain::nar_info::DeadlineGroup;
 use crate::domain::nar_info::model::{
@@ -43,11 +44,12 @@ impl NarInfoService {
     pub async fn resolve(
         &self,
         hash: &StorePathHash,
+        headers: PassthroughHeaders,
     ) -> (
         Result<NarInfoResolution, ResolveNarInfoError>,
         Vec<ResolveNarInfoEvent>,
     ) {
-        let (res, mut events) = self.resolve_unknown(hash).await;
+        let (res, mut events) = self.resolve_unknown(hash, headers).await;
         match res {
             Ok(outcome) => {
                 let resolution =
@@ -79,6 +81,7 @@ impl NarInfoService {
     async fn resolve_unknown(
         &self,
         hash: &StorePathHash,
+        headers: PassthroughHeaders,
     ) -> (
         Result<Option<(UpstreamNarInfoData, SubstituterMeta)>, ResolveNarInfoError>,
         Vec<ResolveNarInfoEvent>,
@@ -86,7 +89,7 @@ impl NarInfoService {
         let substituters = self.substituter_repository.query_all_available().await;
 
         let (res, events) = self
-            .query_substituters(hash, substituters, self.tolerance)
+            .query_substituters(hash, headers, substituters, self.tolerance)
             .await;
         (res, events)
     }
@@ -94,12 +97,14 @@ impl NarInfoService {
     async fn query_substituters(
         &self,
         hash: &StorePathHash,
+        headers: PassthroughHeaders,
         substituters: Arc<Vec<SubstituterCandidate>>,
         tolerance: u64,
     ) -> (
         Result<Option<(UpstreamNarInfoData, SubstituterMeta)>, ResolveNarInfoError>,
         Vec<ResolveNarInfoEvent>,
     ) {
+        let headers = Arc::new(headers);
         let mut substituter_graces = HashMap::new();
         for substituter in substituters.iter() {
             substituter_graces.insert(substituter, substituter.grace(tolerance as i64));
@@ -115,8 +120,9 @@ impl NarInfoService {
                 let provider = Arc::clone(&self.nar_info_provider);
                 let sub = substituter.clone();
                 let url = hash.on_substituter(sub.meta());
+                let headers = Arc::clone(&headers);
                 let timeout = sub.meta().nar_info_timeout();
-                async move { (sub, provider.query_nar_info(&url, timeout).await) }
+                async move { (sub, provider.query_nar_info(&url, &headers, timeout).await) }
             });
             query_cancellers.insert(substituter, handle);
         }

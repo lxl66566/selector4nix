@@ -5,6 +5,7 @@ use selector4nix_actor::actor::{Actor, ActorPre, ActorPreBuilder, Context, Empty
 use tokio::sync::oneshot::Sender as OneshotSender;
 
 use crate::domain::common::expire_at::ExpireAt;
+use crate::domain::common::passthrough_headers::PassthroughHeaders;
 use crate::domain::nar_info::model::{NarInfo, ProxyNarInfoData, StorePathHash};
 use crate::domain::nar_info::{
     NarInfoRepository, NarInfoService, ResolveNarInfoError, ResolveNarInfoEvent,
@@ -12,7 +13,10 @@ use crate::domain::nar_info::{
 
 #[derive(Debug)]
 pub enum NarInfoRequest {
-    ResolveNarInfo(OneshotSender<ResolveNarInfoResponse>),
+    ResolveNarInfo {
+        reply_to: OneshotSender<ResolveNarInfoResponse>,
+        headers: PassthroughHeaders,
+    },
 }
 
 #[derive(Debug)]
@@ -58,6 +62,7 @@ impl NarInfoActor {
         &self,
         nar_info: NarInfo,
         reply_to: OneshotSender<ResolveNarInfoResponse>,
+        headers: PassthroughHeaders,
     ) -> NarInfo {
         let nar_info = nar_info.check_expiry_and_update(SystemTime::now());
 
@@ -67,7 +72,10 @@ impl NarInfoActor {
             return nar_info;
         }
 
-        let (res, events) = self.nar_info_service.resolve(nar_info.hash()).await;
+        let (res, events) = self
+            .nar_info_service
+            .resolve(nar_info.hash(), headers)
+            .await;
         match res {
             Ok(resolution) => {
                 let res = Ok(resolution.nar_info().cloned());
@@ -117,9 +125,10 @@ impl Actor for NarInfoActor {
         request: Self::Request,
     ) -> Option<Self::State> {
         match request {
-            NarInfoRequest::ResolveNarInfo(reply) => {
-                Some(self.handle_request_resolve_nar_info(state, reply).await)
-            }
+            NarInfoRequest::ResolveNarInfo { reply_to, headers } => Some(
+                self.handle_request_resolve_nar_info(state, reply_to, headers)
+                    .await,
+            ),
         }
     }
 }

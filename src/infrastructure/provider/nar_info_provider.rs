@@ -7,6 +7,7 @@ use http::StatusCode;
 use reqwest::Client;
 use snafu::ResultExt;
 
+use crate::domain::common::passthrough_headers::PassthroughHeaders;
 use crate::domain::common::url::Url;
 use crate::domain::nar_info::model::UpstreamNarInfoData;
 use crate::domain::nar_info::port::error_ctx::{OfflineSnafu, ServiceSnafu};
@@ -34,12 +35,17 @@ impl NarInfoProvider for ReqwestNarInfoProvider {
     async fn query_nar_info(
         &self,
         url: &Url,
+        headers: &PassthroughHeaders,
         timeout: Option<Duration>,
     ) -> Result<Option<NarInfoQueryData>, QueryNarInfoError> {
         tracing::debug!(%url, "fetching nar info from substituter");
 
         let timeout = timeout.unwrap_or(self.default_timeout);
-        let request = self.client.get(url.value()).timeout(timeout);
+        let request = self
+            .client
+            .get(url.value())
+            .headers(headers.to_headers())
+            .timeout(timeout);
 
         let request = if let Some(credential) = self.credentials.lookup(url) {
             request.basic_auth(credential.login.clone(), credential.secret.clone())

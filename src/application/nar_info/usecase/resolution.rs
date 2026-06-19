@@ -4,6 +4,7 @@ use crate::application::nar_file::actor::{NarFileActorRegistry, NarFileRequest};
 use crate::application::nar_info::actor::{NarInfoActorRegistry, NarInfoRequest};
 use crate::application::substituter::actor::{SubstituterActorRegistry, SubstituterRequest};
 use crate::application::{AppErrorKind, AppOptionExt, AppResult, AppResultExt};
+use crate::domain::common::passthrough_headers::PassthroughHeaders;
 use crate::domain::nar_file::model::{NarFileKey, NarFileLocation};
 use crate::domain::nar_info::model::{ProxyNarInfoData, StorePathHash};
 use crate::domain::nar_info::{ResolveNarInfoError, ResolveNarInfoEvent};
@@ -27,13 +28,17 @@ impl NarInfoResolutionUseCase {
         }
     }
 
-    pub async fn get_nar_info(&self, hash: StorePathHash) -> AppResult<ProxyNarInfoData> {
+    pub async fn get_nar_info(
+        &self,
+        hash: StorePathHash,
+        headers: PassthroughHeaders,
+    ) -> AppResult<ProxyNarInfoData> {
         tracing::info!(hash = %hash.value(), "resolving nar info");
 
         let address = self.nar_info_registry.get(&hash).await;
 
         let response = address
-            .ask(|reply_to| NarInfoRequest::ResolveNarInfo(reply_to))
+            .ask(|reply_to| NarInfoRequest::ResolveNarInfo { reply_to, headers })
             .await
             .map_err(|_| anyhow::anyhow!("nar actor terminated unexpectedly"))
             .wrap(AppErrorKind::Unknown)?;

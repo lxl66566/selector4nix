@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use selector4nix::domain::common::passthrough_headers::PassthroughHeaders;
 use selector4nix::domain::common::url::Url;
 use selector4nix::domain::nar_info::model::{NarUrlRewriteOption, StorePathHash};
 use selector4nix::domain::nar_info::port::NarInfoQueryData;
@@ -59,7 +60,9 @@ async fn run_test(
         env.ignore_query_error,
     );
 
-    let (res, events) = nar_resolution_service.resolve(&input.hash).await;
+    let (res, events) = nar_resolution_service
+        .resolve(&input.hash, PassthroughHeaders::empty())
+        .await;
 
     assert_eq!(
         res.map(|resolution| resolution.source_url().cloned()),
