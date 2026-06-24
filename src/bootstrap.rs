@@ -130,7 +130,6 @@ pub async fn init_context(
     let substituter_probing_provider = Arc::new(ReqwestSubstituterProbingProvider::new(
         http_client.clone(),
         config.network.nar_info_timeout,
-        concurrency.clone(),
         credentials.clone(),
     ));
 
